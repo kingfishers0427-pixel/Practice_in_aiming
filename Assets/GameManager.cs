@@ -1,70 +1,138 @@
 using UnityEngine;
-using TMPro; // UIを操作するために必要
+using TMPro;
 
 public class GameManager : MonoBehaviour
 {
-    [Header("--- UI設定 ---")]
-    public TextMeshProUGUI scoreText;
-    public TextMeshProUGUI timerText;
+    [Header("--- 既存のUIオブジェクト設定 ---")]
+    public TextMeshProUGUI timerText;   
+    public TextMeshProUGUI scoreText;   
+    public TextMeshProUGUI countdownText; 
 
-    [Header("--- ゲーム設定 ---")]
-    public float timeLimit = 60f; // 1分間
+    [Header("--- ゲームルール設定 ---")]
+    public float timeRemaining = 60f;   
+    private int score = 0;              
+    private bool isGameActive = false; 
 
-    private int score = 0;
-    private float currentTime;
-    private bool isGamePlaying = true;
+    // カウントダウン用のタイマー
+    private float countdownTimer = 3.5f; 
+    private bool isCountingDown = true;
+
+    [Header("--- サイバーパンク光演出設定 ---")]
+    // ★制御したい発光マテリアル（敵のネオンマテリアルなど）をここに登録します
+    public Material neonMaterial; 
+    
+    // パレットのベース色を保持する変数
+    private Color baseColor;
+
+    public bool IsPlaying() => isGameActive; 
 
     void Start()
     {
-        currentTime = timeLimit;
-        UpdateUI();
+        isCountingDown = true;
+        isGameActive = false;
+        Time.timeScale = 1f;
+
+        // マテリアルから現在の基本の色（Emission Color）を取得しておく
+        if (neonMaterial != null)
+        {
+            baseColor = neonMaterial.GetColor("_EmissionColor");
+            
+            // ★【ゲーム開始前】カウントダウン中は Intensity を 0 にして消灯
+            SetMaterialIntensity(0f);
+        }
+
+        if (timerText != null) timerText.text = $"TIME: {Mathf.CeilToInt(timeRemaining)}";
+        if (scoreText != null) scoreText.text = $"SCORE: {score}";
     }
 
     void Update()
     {
-        if (!isGamePlaying) return;
-
-        // タイマーのカウントダウン
-        currentTime -= Time.deltaTime;
-
-        if (currentTime <= 0f)
+        // 1. カウントダウン中の処理
+        if (isCountingDown)
         {
-            currentTime = 0f;
-            EndGame();
+            countdownTimer -= Time.deltaTime;
+
+            // カウントダウン中はずっと確実に消灯 (0)
+            SetMaterialIntensity(0f);
+
+            if (countdownTimer > 2.5f) { if (countdownText != null) countdownText.text = "3"; }
+            else if (countdownTimer > 1.5f) { if (countdownText != null) countdownText.text = "2"; }
+            else if (countdownTimer > 0.5f) { if (countdownText != null) countdownText.text = "1"; }
+            else if (countdownTimer > 0f) { if (countdownText != null) countdownText.text = "START!"; }
+            else
+            {
+                // カウントダウン終了！ゲーム開始
+                isCountingDown = false;
+                isGameActive = true;
+                if (countdownText != null) countdownText.enabled = false; 
+            }
+            return; 
         }
 
-        UpdateUI();
+        // 2. ゲームプレイ中の処理
+        if (isGameActive)
+        {
+            if (timeRemaining > 0)
+            {
+                timeRemaining -= Time.deltaTime;
+                UpdateUI();
+
+                // ★【ゲーム中】サイン波（Sin波）を使って、Intensityを 0～1 の間で行ったり来たりさせる（波打つ明滅）
+                // Time.time * 3f の数値を大きくすると、明滅のテンポが速くなります
+                float currentIntensity = (Mathf.Sin(Time.time * 3f) + 1f) / 2f; 
+                SetMaterialIntensity(currentIntensity);
+            }
+            else
+            {
+                timeRemaining = 0;
+                isGameActive = false;
+                OnTimeUp();
+            }
+        }
     }
 
-    // ヒットしたときにスコアを加算する関数（外部から呼ばれる）
+    // マテリアルの発光強度（Intensity）を書き換える関数
+    void SetMaterialIntensity(float intensity)
+    {
+        if (neonMaterial != null)
+        {
+            // Unityの内部仕様に合わせて、元の色に intensity（2の乗数表現）を掛け合わせて適用する
+            // 0の時は完全消灯、1の時は元の最大発光になります
+            Color finalColor = baseColor * Mathf.LinearToGammaSpace(intensity);
+            neonMaterial.SetColor("_EmissionColor", finalColor);
+            
+            // 反射などがリアルタイムに更新されるようにする命令
+            DynamicGI.SetEmissive(GetComponent<Renderer>(), finalColor);
+        }
+    }
+
     public void AddScore()
     {
-        if (!isGamePlaying) return;
+        if (!isGameActive) return;
         score++;
         UpdateUI();
     }
 
-    // 現在のゲーム状態（プレイ中かどうか）を返す関数
-    public bool IsPlaying()
-    {
-        return isGamePlaying;
-    }
-
     void UpdateUI()
     {
-        scoreText.text = $"SCORE: {score}";
-        timerText.text = $"TIME: {currentTime:F1}"; // 小数点第1位まで表示
+        if (timerText != null) timerText.text = $"TIME: {Mathf.CeilToInt(timeRemaining)}";
+        if (scoreText != null) scoreText.text = $"SCORE: {score}";
     }
 
-    void EndGame()
+    void OnTimeUp()
     {
-        isGamePlaying = false;
-        timerText.text = "TIME UP!";
+        if (timerText != null) timerText.text = "TIME UP!";
+        if (scoreText != null) scoreText.text = $"FINAL SCORE: {score}";
         
-        // 練習終了後にマウスカーソルを復活させる
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
+        // ★【ゲーム終了】タイムアップした瞬間に Intensity を 0 に戻して完全消灯
+        SetMaterialIntensity(0f);
 
-        Debug.Log($"【練習終了】 あなたのスコアは {score} 回ヒットでした！");
+        Debug.Log("タイムアップ！ネオンを消灯しました。");
+    }
+
+    // ゲームを途中で止めた時などに、マテリアルの色を元の状態に戻す安全対策
+    void OnDisable()
+    {
+        SetMaterialIntensity(1f);
     }
 }

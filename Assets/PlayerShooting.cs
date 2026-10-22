@@ -4,6 +4,7 @@ public class PlayerShooting : MonoBehaviour
 {
     [Header("--- 射撃設定 ---")]
     public float range = 100f;
+    public GameObject sparkPrefab; // SparkEffect火花
 
     [Header("--- フルオート設定 ---")]
     public bool isFullAuto = true; 
@@ -42,7 +43,7 @@ public class PlayerShooting : MonoBehaviour
     {
         cam = GetComponent<Camera>();
         audioSource = GetComponent<AudioSource>();
-        gameManager = Object.FindFirstObjectByType<GameManager>();
+        gameManager = Object.FindAnyObjectByType<GameManager>();
         mouseLook = GetComponent<FinalsMouseLook>();
 
         // 開始時はマガジンを満タンにする
@@ -110,28 +111,37 @@ public class PlayerShooting : MonoBehaviour
 
         // 3. 画面中央からのレイキャスト（弾の当たり判定）
         Vector3 rayOrigin = cam.ViewportToWorldPoint(new Vector3(0.5f, 0.5f, 0f));
+
         RaycastHit hit;
-
-        if (Physics.Raycast(rayOrigin, cam.transform.forward, out hit, range))
+        if (Physics.Raycast(cam.transform.position, cam.transform.forward, out hit, range))
         {
-            GameObject hitObject = hit.collider.gameObject;
-
-            if (hitObject.CompareTag("Target"))
+            // 1. まず、当たった相手が「的の体力（TargetHealth）」を持っているか調べる
+            TargetHealth target = hit.transform.GetComponent<TargetHealth>();
+            
+            if (target != null)
             {
-                if (gameManager != null) gameManager.AddScore();
+                // 【的（stylish_target）に当たった時の処理】
+                target.TakeDamage(25f);
 
-                if (audioSource != null && hitSound != null)
+                // 的用の火花を生成
+                if (sparkPrefab != null)
                 {
-                    audioSource.PlayOneShot(hitSound);
-                }
-
-                FlickTarget flickTarget = hitObject.GetComponent<FlickTarget>();
-                if (flickTarget != null)
-                {
-                    flickTarget.MoveToRandomPosition();
+                    GameObject spark = Instantiate(sparkPrefab, hit.point, Quaternion.LookRotation(hit.normal));
+                    Destroy(spark, 0.5f); 
                 }
             }
-        }
+            else
+            {
+                // 2. 【的以外（床、障害物、見えない壁など）に当たった時の処理】
+                // 何もない空中（虚空）ではなく、何かしらの物理オブジェクトに衝突した時だけ火花を散らす
+                if (sparkPrefab != null)
+                {
+                    GameObject spark = Instantiate(sparkPrefab, hit.point, Quaternion.LookRotation(hit.normal));
+                    Destroy(spark, 0.5f); 
+                }
+            }
+}
+
     }
 
     // 時間の経過（待機）を伴うリロード処理（コルーチン）
