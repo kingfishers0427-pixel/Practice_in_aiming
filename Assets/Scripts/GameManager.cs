@@ -20,9 +20,11 @@ public class GameManager : MonoBehaviour
     [Header("--- サイバーパンク光演出設定 ---")]
     // ★制御したい発光マテリアル（敵のネオンマテリアルなど）をここに登録します
     public Material neonMaterial; 
-    
+    public Material secondNeonMaterial; // ★【追加】新しく作った2つ目のマテリアルを入れる枠
+
     // パレットのベース色を保持する変数
     private Color baseColor;
+    private Color secondBaseColor;      // ★【追加】2つ目のマテリアルのベース色を保持する変数
 
     public bool IsPlaying() => isGameActive; 
 
@@ -36,12 +38,16 @@ public class GameManager : MonoBehaviour
         if (neonMaterial != null)
         {
             baseColor = neonMaterial.GetColor("_EmissionColor");
-            
-            // ★【ゲーム開始前】カウントダウン中は Intensity を 0 にして消灯
-            SetMaterialIntensity(0f);
         }
+        // ★【追加】2つ目のマテリアルの初期化
+        if (secondNeonMaterial != null)
+        {
+            secondBaseColor = secondNeonMaterial.GetColor("_EmissionColor");
+        }
+            // ★【ゲーム開始前】カウントダウン中は Intensity を 0 にして消灯
+            SetMaterialIntensity(0f); // 2つ同時に消灯スタート
 
-        if (timerText != null) timerText.text = $"TIME: {Mathf.CeilToInt(timeRemaining)}";
+        if (timerText != null) timerText.text = $"{Mathf.CeilToInt(timeRemaining)}";
         if (scoreText != null) scoreText.text = $"SCORE: {score}";
     }
 
@@ -104,6 +110,15 @@ public class GameManager : MonoBehaviour
             // 反射などがリアルタイムに更新されるようにする命令
             DynamicGI.SetEmissive(GetComponent<Renderer>(), finalColor);
         }
+        // ★【追加】2つ目のマテリアルも全く同じ明るさに同時にコントロールする
+        if (secondNeonMaterial != null)
+        {
+            Color finalColor2 = secondBaseColor * Mathf.LinearToGammaSpace(intensity);
+            secondNeonMaterial.SetColor("_EmissionColor", finalColor2);
+            // ※もしGameManager自身にRendererがついている場合はそのままでOKですが、
+            // 念のためリアルタイム更新の命令を2つ目にも優しく適用します
+            DynamicGI.SetEmissive(GetComponent<Renderer>(), finalColor2);
+        }
     }
 
     public void AddScore()
@@ -115,7 +130,7 @@ public class GameManager : MonoBehaviour
 
     void UpdateUI()
     {
-        if (timerText != null) timerText.text = $"TIME: {Mathf.CeilToInt(timeRemaining)}";
+        if (timerText != null) timerText.text = $"{Mathf.CeilToInt(timeRemaining)}";
         if (scoreText != null) scoreText.text = $"SCORE: {score}";
     }
 
